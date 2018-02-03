@@ -64,6 +64,8 @@ class PoetryModel(object):
 
     def generate_sample_result(self, epoch, logs):
         '''训练过程中，每个epoch打印出当前的学习情况'''
+        if epoch % 10 != 0:
+            return
         print("\n==================Epoch {}=====================".format(epoch))
         for diversity in [0.5, 1.0, 1.5]:
             print("------------Diversity {}--------------".format(diversity))
@@ -119,7 +121,7 @@ class PoetryModel(object):
         return res
 
     def data_generator(self):
-        '''生成数据'''
+        '''生成器生成数据'''
         i = 0
         while 1:
             x = self.files_content[i: i + self.config.max_len]
@@ -148,7 +150,7 @@ class PoetryModel(object):
 
     def train(self):
         '''训练模型'''
-        number_of_epoch = len(self.words) // self.config.batch_size
+        number_of_epoch = len(self.files_content) // self.config.batch_size
 
         if not self.model:
             self.build_model()
