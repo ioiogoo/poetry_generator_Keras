@@ -10,5 +10,5 @@ class Config(object):
     weight_file = 'poetry_model.h5'
     # 根据前六个字预测第七个字
     max_len = 6
-    batch_size = 32
+    batch_size = 512
     learning_rate = 0.001

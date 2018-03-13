@@ -10,7 +10,7 @@ import keras
 import numpy as np
 from keras.callbacks import LambdaCallback
 from keras.models import Input, Model, load_model
-from keras.layers import LSTM, Dropout, Dense
+from keras.layers import LSTM, Dropout, Dense, Flatten, Bidirectional, Embedding, GRU
 from keras.optimizers import Adam
 
 from data_utils import *
@@ -29,6 +29,7 @@ class PoetryModel(object):
         # 如果模型文件存在则直接加载模型，否则开始训练
         if os.path.exists(self.config.weight_file):
             self.model = load_model(self.config.weight_file)
+            self.model.summary()
         else:
             self.train()
         self.do_train = False
@@ -38,12 +39,14 @@ class PoetryModel(object):
         '''建立模型'''
 
         # 输入的dimension
-        input_tensor = Input(shape=(self.config.max_len, len(self.words)))
-        lstm = LSTM(512, return_sequences=True)(input_tensor)
-        dropout = Dropout(0.6)(lstm)
-        lstm = LSTM(256)(dropout)
-        dropout = Dropout(0.6)(lstm)
-        dense = Dense(len(self.words), activation='softmax')(dropout)
+        input_tensor = Input(shape=(self.config.max_len,))
+        embedd = Embedding(len(self.num2word) + 2, 300, input_length=self.config.max_len)(input_tensor)
+        lstm = Bidirectional(GRU(128, return_sequences=True))(embedd)
+        # dropout = Dropout(0.6)(lstm)
+        # lstm = LSTM(256)(dropout)
+        # dropout = Dropout(0.6)(lstm)
+        flatten = Flatten()(lstm)
+        dense = Dense(len(self.words), activation='softmax')(flatten)
         self.model = Model(inputs=input_tensor, outputs=dense)
         optimizer = Adam(lr=self.config.learning_rate)
         self.model.compile(loss='categorical_crossentropy', optimizer=optimizer, metrics=['accuracy'])
@@ -64,8 +67,8 @@ class PoetryModel(object):
 
     def generate_sample_result(self, epoch, logs):
         '''训练过程中，每个epoch打印出当前的学习情况'''
-        if epoch % 10 != 0:
-            return
+        # if epoch % 5 != 0:
+        #     return
         print("\n==================Epoch {}=====================".format(epoch))
         for diversity in [0.5, 1.0, 1.5]:
             print("------------Diversity {}--------------".format(diversity))
@@ -74,9 +77,9 @@ class PoetryModel(object):
             sentence = self.files_content[start_index: start_index + self.config.max_len]
             generated += sentence
             for i in range(20):
-                x_pred = np.zeros((1, self.config.max_len, len(self.words)))
+                x_pred = np.zeros((1, self.config.max_len))
                 for t, char in enumerate(sentence[-6:]):
-                    x_pred[0, t, self.word2numF(char)] = 1.
+                    x_pred[0, t] = self.word2numF(char)
 
                 preds = self.model.predict(x_pred, verbose=0)[0]
                 next_index = self.sample(preds, diversity)
@@ -109,9 +112,9 @@ class PoetryModel(object):
         for c in text:
             seed = seed[1:] + c
             for j in range(5):
-                x_pred = np.zeros((1, self.config.max_len, len(self.words)))
+                x_pred = np.zeros((1, self.config.max_len))
                 for t, char in enumerate(seed):
-                    x_pred[0, t, self.word2numF(char)] = 1.
+                    x_pred[0, t] = self.word2numF(char)
 
                 preds = self.model.predict(x_pred, verbose=0)[0]
                 next_index = self.sample(preds, 1.0)
@@ -127,7 +130,11 @@ class PoetryModel(object):
             x = self.files_content[i: i + self.config.max_len]
             y = self.files_content[i + self.config.max_len]
 
-            if ']' in x or ']' in y:
+            puncs = [']', '[', '（', '）', '{', '}', '：', '《', '》', ':']
+            if len([i for i in puncs if i in x]) != 0:
+                i += 1
+                continue
+            if len([i for i in puncs if i in y]) != 0:
                 i += 1
                 continue
 
@@ -138,13 +145,12 @@ class PoetryModel(object):
             y_vec[0, self.word2numF(y)] = 1.0
 
             x_vec = np.zeros(
-                shape=(1, self.config.max_len, len(self.words)),
-                dtype=np.bool
+                shape=(1, self.config.max_len),
+                dtype=np.int32
             )
 
             for t, char in enumerate(x):
-                x_vec[0, t, self.word2numF(char)] = 1.0
-
+                x_vec[0, t] = self.word2numF(char)
             yield x_vec, y_vec
             i += 1
 
@@ -154,6 +160,8 @@ class PoetryModel(object):
 
         if not self.model:
             self.build_model()
+
+        self.model.summary()
 
         self.model.fit_generator(
             generator=self.data_generator(),

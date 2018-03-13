@@ -4,6 +4,7 @@
 @date: 2018/1/31 19:30
 '''
 
+puncs = [']', '[', '（', '）', '{', '}', '：', '《', '》']
 
 
 def preprocess_file(Config):
@@ -12,9 +13,12 @@ def preprocess_file(Config):
     with open(Config.poetry_file, 'r', encoding='utf-8') as f:
         for line in f:
             # 每行的末尾加上"]"符号代表一首诗结束
-            files_content += line.strip() + "]".split(":")[-1]
+            for char in puncs:
+                line = line.replace(char, "")
+            files_content += line.strip() + "]"
 
     words = sorted(list(files_content))
+    words.remove(']')
     counted_words = {}
     for word in words:
         if word in counted_words:
@@ -29,12 +33,12 @@ def preprocess_file(Config):
             erase.append(key)
     for key in erase:
         del counted_words[key]
+    del counted_words[']']
     wordPairs = sorted(counted_words.items(), key=lambda x: -x[1])
 
     words, _ = zip(*wordPairs)
-    words += (" ",)
     # word到id的映射
-    word2num = dict((c, i) for i, c in enumerate(words))
+    word2num = dict((c, i + 1) for i, c in enumerate(words))
     num2word = dict((i, c) for i, c in enumerate(words))
-    word2numF = lambda x: word2num.get(x, len(words) - 1)
+    word2numF = lambda x: word2num.get(x, 0)
     return word2numF, num2word, words, files_content
